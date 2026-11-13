@@ -33,7 +33,7 @@ enum CaptureState {
 }
 
 struct ScreenCastInterface {
-    dynamic_cast: bool,
+    dynamic_cast: Arc<std::sync::Mutex<bool>>,
     auto_select_monitor: bool,
     state: Arc<Mutex<HashMap<String, CaptureSession>>>,
     conn: Connection,
@@ -125,7 +125,7 @@ pub async fn register(conn: &Connection) -> zbus::Result<()> {
 impl ScreenCastInterface {
     fn new(conn: Connection) -> Self {
         Self {
-            dynamic_cast: std::env::var("NIRI_SCREENSHARE_DYNAMIC_CAST").is_ok_and(|v| v == "1"),
+            dynamic_cast: Arc::new(std::sync::Mutex::new(std::env::var("NIRI_SCREENSHARE_DYNAMIC_CAST").is_ok_and(|v| v == "1"))),
             auto_select_monitor: std::env::var("NIRI_SCREENSHARE_DYNAMIC_CAST_AUTO_SELECT_MONITOR")
                 .is_ok_and(|v| v == "1"),
             state: Arc::new(Mutex::new(HashMap::new())),
@@ -210,7 +210,7 @@ impl ScreenCastInterface {
 
     #[zbus(property)]
     fn available_source_types(&self) -> u32 {
-        if self.dynamic_cast {
+        if *self.dynamic_cast.lock().unwrap() {
             2
         } else {
             3
@@ -270,7 +270,7 @@ impl ScreenCastInterface {
     }
 
     async fn select_sources(
-        &self,
+        &mut self,
         request_handle: ObjectPath<'_>,
         session_handle: ObjectPath<'_>,
         _app_id: &str,
@@ -300,7 +300,7 @@ impl ScreenCastInterface {
                 }
                 session.cursor_mode = cursor_niri;
                 session.target = None;
-                if self.dynamic_cast {
+                if *self.dynamic_cast.lock().unwrap() {
                     if requested_types & 2 == 0 {
                         return Ok((2, HashMap::new()));
                     }
@@ -379,8 +379,18 @@ impl ScreenCastInterface {
                 };
 
                 session.target = Some(match choice {
-                    Some(pick::PickerChoice::Monitor(name)) => CaptureTarget::Monitor(name),
-                    Some(pick::PickerChoice::Window(id)) => CaptureTarget::Window(id),
+                    Some(pick::PickerChoice::Monitor(name)) => {
+                        *self.dynamic_cast.lock().unwrap() = false;
+                        CaptureTarget::Monitor(name)
+                    }
+                    Some(pick::PickerChoice::Window(id)) => {
+                        *self.dynamic_cast.lock().unwrap() = false;
+                        CaptureTarget::Window(id)
+                    }
+                    Some(pick::PickerChoice::Dynamic) => {
+                        *self.dynamic_cast.lock().unwrap() = true;
+                        CaptureTarget::Dynamic
+                    }
                     None => {
                         tracing::info!("SelectSources: user cancelled");
                         return Ok((1, HashMap::new()));

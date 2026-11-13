@@ -26,6 +26,7 @@ const PICKER_APP_ID: &str = "io.github.niri.screenshare.picker";
 pub enum PickerChoice {
     Monitor(String),
     Window(u64),
+    Dynamic,
 }
 
 #[derive(Clone)]
@@ -373,6 +374,8 @@ fn build_and_present(
 
     stack.set_visible_child_name(initial_page(!displays.is_empty(), !windows.is_empty()));
 
+    let dynamic = gtk4::Button::with_label("Dynamic");
+    dynamic.add_css_class("pill");
     let cancel = gtk4::Button::with_label("Cancel");
     cancel.add_css_class("pill");
     let share = gtk4::Button::with_label("Share");
@@ -393,6 +396,7 @@ fn build_and_present(
     button_row.set_margin_bottom(12);
     button_row.set_margin_start(12);
     button_row.set_margin_end(12);
+    button_row.append(&dynamic);
     button_row.append(&cancel);
     button_row.append(&share);
 
@@ -414,6 +418,14 @@ fn build_and_present(
         }
     });
 
+    dynamic.connect_clicked({
+        let finish = finish.clone();
+        let selection = selection.clone();
+        move |_| {
+            *selection.borrow_mut() = Some(PickerChoice::Dynamic);
+            finish(true)
+        }
+    });
     cancel.connect_clicked({
         let finish = finish.clone();
         move |_| finish(false)

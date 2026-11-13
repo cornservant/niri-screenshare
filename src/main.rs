@@ -21,6 +21,9 @@ fn main() -> anyhow::Result<()> {
                     Some(screencast::DebugPickerChoice::Window(id)) => {
                         println!("W:{id}");
                     }
+                    Some(screencast::DebugPickerChoice::Dynamic) => {
+                        println!("dynamic cast target");
+                    }
                     None => {
                         std::process::exit(1);
                     }
